@@ -5,6 +5,14 @@ const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
+
+mongoose.connect('mongodb://localhost:27017/chatroom', { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 const GITHUB_APP_ID = process.env.GITHUB_APP_ID || '2471295';
 const GITHUB_PRIVATE_KEY = process.env.GITHUB_PRIVATE_KEY || `-----BEGIN RSA PRIVATE KEY-----
@@ -118,23 +126,103 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-const DATA_FILE = path.join(__dirname, 'messages.json');
-let messages = [];
-const MAX_HISTORY = 500;
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Load persisted messages if the file exists
-try {
-  if (fs.existsSync(DATA_FILE)) {
-    const raw = fs.readFileSync(DATA_FILE, 'utf8');
-    messages = JSON.parse(raw) || [];
+app.use(session({
+  secret: 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({ mongoUrl: 'mongodb://localhost:27017/chatroom' })
+}));
+
+// Models
+const userSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true }
+});
+const User = mongoose.model('User', userSchema);
+
+const roomSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  creator: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  isPrivate: { type: Boolean, default: false },
+  password: String,
+  members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+});
+const Room = mongoose.model('Room', roomSchema);
+
+// Routes
+app.post('/register', async (req, res) => {
+  const { email, username, password } = req.body;
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ email, username, password: hashedPassword });
+    await user.save();
+    req.session.userId = user._id;
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
   }
-} catch (err) {
-  console.error('Failed to read message history:', err);
-  messages = [];
-}
+});
+
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const user = await User.findOne({ username });
+    if (!user || !await bcrypt.compare(password, user.password)) {
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
+    req.session.userId = user._id;
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/logout', (req, res) => {
+  req.session.destroy();
+  res.json({ success: true });
+});
+
+app.post('/create-room', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ success: false, error: 'Not logged in' });
+  const { name, isPrivate, password } = req.body;
+  try {
+    const room = new Room({ name, creator: req.session.userId, isPrivate, password, members: [req.session.userId] });
+    await room.save();
+    res.json({ success: true, roomId: room._id });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/rooms', async (req, res) => {
+  try {
+    const rooms = await Room.find({ isPrivate: false }).populate('creator', 'username');
+    res.json(rooms);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/user', async (req, res) => {
+  if (!req.session.userId) return res.json({});
+  try {
+    const user = await User.findById(req.session.userId).select('username');
+    res.json(user || {});
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/index.html');
+  if (!req.session.userId) {
+    res.sendFile(__dirname + '/login.html');
+  } else {
+    res.sendFile(__dirname + '/index.html');
+  }
 });
 
 app.get('/github-auth', async (req, res) => {
@@ -149,16 +237,17 @@ app.get('/github-auth', async (req, res) => {
 io.on('connection', (socket) => {
   console.log('A user connected', socket.id);
 
-  // Send recent history to the connecting client
-  try {
-    socket.emit('history', messages);
-  } catch (err) {
-    console.error('Failed to send history:', err);
-  }
+  socket.on('join room', async (roomId) => {
+    // Check if user is logged in, perhaps from session
+    // For simplicity, assume authenticated
+    socket.join(roomId);
+    // Send history for room, but since no DB, send empty or global
+    socket.emit('history', []); // TODO: load room history
+  });
 
   // Listen for chat messages (expect object with text, username, id, time)
   socket.on('chat message', async (msg) => {
-    if (!msg) return;
+    if (!msg || !msg.roomId) return;
     // normalize message object
     const entry = {
       text: (msg.text || String(msg || '')).slice(0, 2000),
@@ -167,17 +256,8 @@ io.on('connection', (socket) => {
       time: msg.time || new Date().toISOString(),
     };
 
-    // append and persist
-    messages.push(entry);
-    if (messages.length > MAX_HISTORY) messages = messages.slice(-MAX_HISTORY);
-    try {
-      fs.writeFileSync(DATA_FILE, JSON.stringify(messages, null, 2));
-    } catch (err) {
-      console.error('Failed to persist messages:', err);
-    }
-
-    // Broadcast message to all clients
-    io.emit('chat message', entry);
+    // Broadcast message to room
+    io.to(msg.roomId).emit('chat message', entry);
 
     // Optionally post to GitHub issue
     try {
@@ -192,6 +272,6 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(10000, () => {
-  console.log('Server running on http://localhost:10000');
+server.listen(3000, () => {
+  console.log('Server running on http://localhost:3000');
 });
