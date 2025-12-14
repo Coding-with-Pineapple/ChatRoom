@@ -8,11 +8,11 @@ const axios = require('axios');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
-const MongoStore = require('connect-mongo');
+const MongoStore = require('connect-mongo')(session);
 
-mongoose.connect('mongodb://localhost:27017/chatroom', { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// mongoose.connect('mongodb+srv://arhanpatil:<password>@chatroomcluster.mongocluster.cosmos.azure.com/?tls=true&authMechanism=SCRAM-SHA-256&retrywrites=false&maxIdleTimeMS=120000')
+//   .then(() => console.log('MongoDB connected'))
+//   .catch(err => console.error('MongoDB connection error:', err));
 
 const GITHUB_APP_ID = process.env.GITHUB_APP_ID || '2471295';
 const GITHUB_PRIVATE_KEY = process.env.GITHUB_PRIVATE_KEY || `-----BEGIN RSA PRIVATE KEY-----
@@ -132,8 +132,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(session({
   secret: 'your-secret-key',
   resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl: 'mongodb://localhost:27017/chatroom' })
+  saveUninitialized: false
+  // store: new MongoStore({ url: 'mongodb+srv://arhanpatil:<password>@chatroomcluster.mongocluster.cosmos.azure.com/?tls=true&authMechanism=SCRAM-SHA-256&retrywrites=false&maxIdleTimeMS=120000' })
 }));
 
 // Models
@@ -156,29 +156,16 @@ const Room = mongoose.model('Room', roomSchema);
 // Routes
 app.post('/register', async (req, res) => {
   const { email, username, password } = req.body;
-  try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ email, username, password: hashedPassword });
-    await user.save();
-    req.session.userId = user._id;
-    res.json({ success: true });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
-  }
+  // For testing without DB
+  req.session.userId = username; // mock
+  res.json({ success: true });
 });
 
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
-  try {
-    const user = await User.findOne({ username });
-    if (!user || !await bcrypt.compare(password, user.password)) {
-      return res.status(401).json({ success: false, error: 'Invalid credentials' });
-    }
-    req.session.userId = user._id;
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+  // For testing without DB
+  req.session.userId = username; // mock
+  res.json({ success: true });
 });
 
 app.post('/logout', (req, res) => {
@@ -187,34 +174,23 @@ app.post('/logout', (req, res) => {
 });
 
 app.post('/create-room', async (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ success: false, error: 'Not logged in' });
+  // if (!req.session.userId) return res.status(401).json({ success: false, error: 'Not logged in' });
   const { name, isPrivate, password } = req.body;
-  try {
-    const room = new Room({ name, creator: req.session.userId, isPrivate, password, members: [req.session.userId] });
-    await room.save();
-    res.json({ success: true, roomId: room._id });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
-  }
+  // Mock
+  res.json({ success: true, roomId: 'newroom' });
 });
 
 app.get('/rooms', async (req, res) => {
-  try {
-    const rooms = await Room.find({ isPrivate: false }).populate('creator', 'username');
-    res.json(rooms);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  // Mock rooms
+  res.json([
+    { _id: 'room1', name: 'General', creator: { username: 'Admin' } },
+    { _id: 'room2', name: 'Random', creator: { username: 'Bot' } }
+  ]);
 });
 
 app.get('/user', async (req, res) => {
   if (!req.session.userId) return res.json({});
-  try {
-    const user = await User.findById(req.session.userId).select('username');
-    res.json(user || {});
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  res.json({ username: req.session.userId }); // mock
 });
 
 app.get('/', (req, res) => {

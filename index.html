@@ -75,7 +75,7 @@
           <input id="newRoomName" placeholder="New room name" />
           <label><input type="checkbox" id="isPrivate"> Private</label>
           <input id="roomPassword" placeholder="Password (if private)" type="password" />
-          <button id="createRoomBtn">Create Room</button>
+          <button id="createRoomBtn" onclick="createRoom()">Create Room</button>
           <button id="joinBtn" style="display:none">Join Room</button>
         </div>
       </div>
@@ -83,6 +83,7 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
+      alert('Script starting');
       const socket = io();
       const form = document.getElementById('form');
       const input = document.getElementById('input');
@@ -99,17 +100,27 @@
       let currentRoom = null;
 
       // Load user
-      fetch('/user').then(res => res.json()).then(data => {
+      fetch('/user').then(res => {
+        alert('Fetch user response status: ' + res.status);
+        return res.json();
+      }).then(data => {
+        alert('User data: ' + JSON.stringify(data));
         if (data.username) {
           username = data.username;
           loadRooms();
         } else {
-          window.location.href = '/login.html';
+          alert('No username, but continuing');
+          // window.location.href = '/login.html';
+          loadRooms(); // for testing
         }
+      }).catch(err => {
+        alert('Fetch user error: ' + err);
       });
 
       function loadRooms() {
+        alert('Loading rooms');
         fetch('/rooms').then(res => res.json()).then(rooms => {
+          alert('Rooms loaded: ' + rooms.length);
           roomList.innerHTML = '';
           rooms.forEach(room => {
             const btn = document.createElement('button');
@@ -117,17 +128,25 @@
             btn.onclick = () => joinRoom(room._id);
             roomList.appendChild(btn);
           });
+        }).catch(err => {
+          alert('Load rooms error: ' + err);
         });
       }
 
       createRoomBtn.addEventListener('click', async () => {
+        alert('Create button clicked');
         const name = newRoomName.value.trim();
-        if (!name) return;
+        if (!name) {
+          alert('Enter room name');
+          return;
+        }
+        alert('Sending request');
         const res = await fetch('/create-room', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, isPrivate: isPrivate.checked, password: roomPassword.value })
         });
+        alert('Response received');
         const data = await res.json();
         if (data.success) {
           joinRoom(data.roomId);
@@ -136,7 +155,30 @@
         }
       });
 
+      window.createRoom = async () => {
+        alert('Create button clicked (onclick)');
+        const name = newRoomName.value.trim();
+        if (!name) {
+          alert('Enter room name');
+          return;
+        }
+        alert('Sending request');
+        const res = await fetch('/create-room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, isPrivate: isPrivate.checked, password: roomPassword.value })
+        });
+        alert('Response received');
+        const data = await res.json();
+        if (data.success) {
+          joinRoom(data.roomId);
+        } else {
+          alert(data.error);
+        }
+      };
+
       function joinRoom(roomId) {
+        alert('Joining room ' + roomId);
         currentRoom = roomId;
         socket.emit('join room', roomId);
         overlay.style.display = 'none';

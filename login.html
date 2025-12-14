@@ -41,7 +41,7 @@
         body: JSON.stringify({ email, username, password })
       });
       const data = await res.json();
-      if (data.success) window.location.reload();
+      if (data.success) window.location.href = '/';
       else alert(data.error);
     });
 
@@ -55,7 +55,7 @@
         body: JSON.stringify({ username, password })
       });
       const data = await res.json();
-      if (data.success) window.location.reload();
+      if (data.success) window.location.href = '/';
       else alert(data.error);
     });
   </script>
