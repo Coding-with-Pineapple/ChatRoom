@@ -4,10 +4,48 @@
   <meta charset="utf-8">
   <title>Login/Register</title>
   <style>
-    body { font-family: Arial; text-align: center; padding: 50px; }
-    form { max-width: 300px; margin: auto; }
-    input { display: block; width: 100%; margin: 10px 0; padding: 8px; }
-    button { padding: 10px; width: 100%; }
+    :root{
+      --bg1:#0f1724;
+      --bg2:#0b3a5b;
+      --card:#0e2738;
+      --accent:#06b6d4;
+      --muted:#9ca3af;
+      --mine:#0369a1;
+      --other:#162c3a;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;min-height:100vh;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial;
+      background:linear-gradient(180deg,var(--bg1),var(--bg2));color:#e6eef4;
+      display:flex;align-items:center;justify-content:center;padding:24px
+    }
+    .login-container{
+      width:100%;max-width:400px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));
+      border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,0.6);overflow:hidden;padding:20px;
+      display:flex;flex-direction:column;align-items:center;
+    }
+    .header{
+      text-align:center;padding:18px 20px;background:linear-gradient(90deg,rgba(255,255,255,0.02),transparent);
+      margin-bottom:20px;border-radius:8px;
+    }
+    .logo{
+      width:44px;height:44px;border-radius:8px;background:var(--accent);display:flex;align-items:center;
+      justify-content:center;font-weight:700;color:#04263a;margin:0 auto 10px;
+    }
+    .title{font-size:18px;font-weight:600}
+    .subtitle{font-size:12px;color:var(--muted)}
+
+    form{margin-bottom:20px}
+    input{
+      width:100%;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);
+      background:rgba(255,255,255,0.02);color:inherit;margin-bottom:10px;font-size:14px;
+    }
+    button{
+      width:100%;padding:12px;border-radius:8px;border:none;background:var(--accent);
+      color:#04263a;font-weight:700;cursor:pointer;margin-bottom:10px;
+    }
+    button:active{transform:translateY(1px)}
+    .switch{text-align:center;color:var(--muted);cursor:pointer}
   </style>
 </head>
 <body>

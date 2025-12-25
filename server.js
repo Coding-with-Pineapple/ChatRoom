@@ -201,6 +201,10 @@ app.get('/', (req, res) => {
   }
 });
 
+app.get('/login.html', (req, res) => {
+  res.sendFile(__dirname + '/login.html');
+});
+
 app.get('/github-auth', async (req, res) => {
   try {
     const data = await useInstallationToken();
