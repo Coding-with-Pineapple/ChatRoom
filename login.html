@@ -13,39 +13,39 @@
       --mine:#0369a1;
       --other:#162c3a;
     }
-    *{box-sizing:border-box}
-    body{
-      margin:0;min-height:100vh;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial;
-      background:linear-gradient(180deg,var(--bg1),var(--bg2));color:#e6eef4;
-      display:flex;align-items:center;justify-content:center;padding:24px
+    body {
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial;
+      background: linear-gradient(180deg, var(--bg1), var(--bg2));
+      color: #e6eef4;
+      text-align: center;
+      padding: 50px;
+      margin: 0;
+      min-height: 100vh;
     }
-    .login-container{
-      width:100%;max-width:400px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));
-      border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,0.6);overflow:hidden;padding:20px;
-      display:flex;flex-direction:column;align-items:center;
+    h1 { color: #e6eef4; }
+    h2 { color: #e6eef4; }
+    form { max-width: 300px; margin: auto; }
+    input {
+      display: block;
+      width: 100%;
+      margin: 10px 0;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.02);
+      color: inherit;
     }
-    .header{
-      text-align:center;padding:18px 20px;background:linear-gradient(90deg,rgba(255,255,255,0.02),transparent);
-      margin-bottom:20px;border-radius:8px;
+    button {
+      padding: 10px;
+      width: 100%;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: #04263a;
+      font-weight: 700;
+      cursor: pointer;
     }
-    .logo{
-      width:44px;height:44px;border-radius:8px;background:var(--accent);display:flex;align-items:center;
-      justify-content:center;font-weight:700;color:#04263a;margin:0 auto 10px;
-    }
-    .title{font-size:18px;font-weight:600}
-    .subtitle{font-size:12px;color:var(--muted)}
-
-    form{margin-bottom:20px}
-    input{
-      width:100%;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);
-      background:rgba(255,255,255,0.02);color:inherit;margin-bottom:10px;font-size:14px;
-    }
-    button{
-      width:100%;padding:12px;border-radius:8px;border:none;background:var(--accent);
-      color:#04263a;font-weight:700;cursor:pointer;margin-bottom:10px;
-    }
-    button:active{transform:translateY(1px)}
-    .switch{text-align:center;color:var(--muted);cursor:pointer}
+    button:active { transform: translateY(1px); }
   </style>
 </head>
 <body>
@@ -93,8 +93,11 @@
         body: JSON.stringify({ username, password })
       });
       const data = await res.json();
-      if (data.success) window.location.href = '/';
-      else alert(data.error);
+      if (data.success) {
+        window.location.href = '/';
+      } else {
+        alert(data.error);
+      }
     });
   </script>
 </body>

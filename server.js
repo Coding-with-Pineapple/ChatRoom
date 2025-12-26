@@ -3,16 +3,36 @@ const http = require('http');
 const socketIo = require('socket.io');
 const fs = require('fs');
 const path = require('path');
+const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+
+let messages = [];
+try {
+  messages = JSON.parse(fs.readFileSync('messages.json', 'utf8'));
+} catch (e) {
+  messages = [];
+}
+
+const transporter = nodemailer.createTransport({
+  host: 'smtp-mail.outlook.com', // Outlook SMTP
+  port: 587,
+  secure: false,
+  auth: {
+    user: 'arhan.patil@hotmail.com', // Your email
+    pass: 'Arohan@12' // Your regular email password
+  }
+});
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const MongoStore = require('connect-mongo')(session);
 
-// mongoose.connect('mongodb+srv://arhanpatil:<password>@chatroomcluster.mongocluster.cosmos.azure.com/?tls=true&authMechanism=SCRAM-SHA-256&retrywrites=false&maxIdleTimeMS=120000')
-//   .then(() => console.log('MongoDB connected'))
-//   .catch(err => console.error('MongoDB connection error:', err));
+const mongoUrl = 'mongodb+srv://arhanpatil_db_user:1uq12tWWvfHVmKkr@chatroom.0lc2ugz.mongodb.net/chatroom?retryWrites=true&w=majority';
+
+mongoose.connect(mongoUrl)
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 const GITHUB_APP_ID = process.env.GITHUB_APP_ID || '2471295';
 const GITHUB_PRIVATE_KEY = process.env.GITHUB_PRIVATE_KEY || `-----BEGIN RSA PRIVATE KEY-----
@@ -133,7 +153,6 @@ app.use(session({
   secret: 'your-secret-key',
   resave: false,
   saveUninitialized: false
-  // store: new MongoStore({ url: 'mongodb+srv://arhanpatil:<password>@chatroomcluster.mongocluster.cosmos.azure.com/?tls=true&authMechanism=SCRAM-SHA-256&retrywrites=false&maxIdleTimeMS=120000' })
 }));
 
 // Models
@@ -156,21 +175,29 @@ const Room = mongoose.model('Room', roomSchema);
 // Routes
 app.post('/register', async (req, res) => {
   const { email, username, password } = req.body;
-  // For testing without DB
-  req.session.userId = username; // mock
-  res.json({ success: true });
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ email, username, password: hashedPassword });
+    await user.save();
+    req.session.userId = user._id;
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
 });
 
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
-  // For testing without DB
-  req.session.userId = username; // mock
-  res.json({ success: true });
-});
-
-app.post('/logout', (req, res) => {
-  req.session.destroy();
-  res.json({ success: true });
+  try {
+    const user = await User.findOne({ username });
+    if (!user || !await bcrypt.compare(password, user.password)) {
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
+    req.session.userId = user._id;
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 app.post('/create-room', async (req, res) => {
@@ -189,8 +216,26 @@ app.get('/rooms', async (req, res) => {
 });
 
 app.get('/user', async (req, res) => {
-  if (!req.session.userId) return res.json({});
-  res.json({ username: req.session.userId }); // mock
+  if (req.session.userId) {
+    try {
+      const user = await User.findById(req.session.userId);
+      res.json({ username: user.username });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  } else {
+    res.status(401).json({ error: 'Not logged in' });
+  }
+});
+
+app.post('/logout', (req, res) => {
+  req.session.destroy(err => {
+    if (err) {
+      return res.status(500).json({ success: false, error: 'Logout failed' });
+    }
+    res.clearCookie('connect.sid');
+    res.json({ success: true });
+  });
 });
 
 app.get('/', (req, res) => {
@@ -205,6 +250,10 @@ app.get('/login.html', (req, res) => {
   res.sendFile(__dirname + '/login.html');
 });
 
+app.get('/2fa.html', (req, res) => {
+  res.sendFile(__dirname + '/2fa.html');
+});
+
 app.get('/github-auth', async (req, res) => {
   try {
     const data = await useInstallationToken();
@@ -217,17 +266,11 @@ app.get('/github-auth', async (req, res) => {
 io.on('connection', (socket) => {
   console.log('A user connected', socket.id);
 
-  socket.on('join room', async (roomId) => {
-    // Check if user is logged in, perhaps from session
-    // For simplicity, assume authenticated
-    socket.join(roomId);
-    // Send history for room, but since no DB, send empty or global
-    socket.emit('history', []); // TODO: load room history
-  });
+  // Send history
+  socket.emit('history', messages);
 
   // Listen for chat messages (expect object with text, username, id, time)
   socket.on('chat message', async (msg) => {
-    if (!msg || !msg.roomId) return;
     // normalize message object
     const entry = {
       text: (msg.text || String(msg || '')).slice(0, 2000),
@@ -236,8 +279,13 @@ io.on('connection', (socket) => {
       time: msg.time || new Date().toISOString(),
     };
 
-    // Broadcast message to room
-    io.to(msg.roomId).emit('chat message', entry);
+    // Add to messages
+    messages.push(entry);
+    // Save to file
+    fs.writeFileSync('messages.json', JSON.stringify(messages, null, 2));
+
+    // Broadcast message
+    io.emit('chat message', entry);
 
     // Optionally post to GitHub issue
     try {
